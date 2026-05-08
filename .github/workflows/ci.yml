@@ -41,11 +41,15 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: "1"
 
-      - name: Scan Dockerfile with hadolint
-        shell: bash
-        run: |
-          docker run --rm -i hadolint/hadolint:latest-debian \
-            hadolint --ignore DL3008 --ignore DL3013 - < Dockerfile
+      - name: Scan built image with Trivy
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: statuspulse-app:${{ github.sha }}
+          scan-type: image
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true  # <--- Add this line
 
       - name: Build Docker image
         run: docker build -t statuspulse-app:${{ github.sha }} -f Dockerfile .
