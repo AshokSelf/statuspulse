@@ -50,6 +50,10 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
           terraform init
+          OIDC_ARN="arn:aws:iam::381492115031:oidc-provider/token.actions.githubusercontent.com"
+          terraform import aws_iam_openid_connect_provider.github $OIDC_ARN || echo "Provider not found or already in state"
+          terraform import aws_iam_role.ec2_ssm statuspulse-ec2-role || echo "Role not found"
+          terraform import aws_iam_role.github_actions statuspulse-github-actions || echo "Role not found"
           terraform apply -auto-approve
           # Export instance_id for the next steps
           echo "EC2_ID=$(terraform output -raw instance_id)" >> $GITHUB_ENV
