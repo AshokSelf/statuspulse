@@ -41,13 +41,11 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: "1"
 
-      - name: Scan Dockerfile with Hadolint
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: Dockerfile
-          # This allows the CI to continue even if there are minor linting warnings
-          # Remove 'failure-threshold' if you want it to be strict
-          failure-threshold: error
+      - name: Scan Dockerfile with hadolint
+        shell: bash
+        run: |
+          docker run --rm -i hadolint/hadolint:latest-debian \
+            hadolint --ignore DL3008 --ignore DL3013 - < Dockerfile
 
       - name: Build Docker image
         run: docker build -t statuspulse-app:${{ github.sha }} -f Dockerfile .
