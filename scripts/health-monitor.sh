@@ -43,9 +43,9 @@ TCP_TIMEOUT_SECONDS="${TCP_TIMEOUT_SECONDS:-3}"
 
 if [ -n "${ACTIVE_SLOT:-}" ]; then
   case "$ACTIVE_SLOT" in
-    blue) ACTIVE_CONTAINER="statuspulse-app-blue" ;;
-    green) ACTIVE_CONTAINER="statuspulse-app-green" ;;
-    *) ACTIVE_CONTAINER="" ;;
+    (blue) ACTIVE_CONTAINER="statuspulse-app-blue" ;;
+    (green) ACTIVE_CONTAINER="statuspulse-app-green" ;;
+    (*) ACTIVE_CONTAINER="" ;;
   esac
 
   if [ -n "$ACTIVE_CONTAINER" ] && ! printf '%s\n' $EXPECTED_CONTAINERS | grep -Fxq "$ACTIVE_CONTAINER"; then
