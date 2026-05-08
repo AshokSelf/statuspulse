@@ -228,7 +228,3 @@ output "elastic_ip" {
 output "site_url" {
   value = local.public_base_url
 }
-
-output "github_actions_role_arn" {
-  value = aws_iam_role.github_actions.arn
-}
