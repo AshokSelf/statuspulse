@@ -4,4 +4,3 @@ uvicorn>=0.24.0
 psycopg2-binary>=2.9.9
 redis>=5.0.1
 pydantic>=2.5.2
-statisfies >=0.13.0

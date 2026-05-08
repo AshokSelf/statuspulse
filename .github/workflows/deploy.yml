@@ -11,7 +11,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   # --- Hardcoded AWS Configuration ---
   AWS_REGION: us-east-1
-  AWS_ROLE_ARN: arn:aws:iam::381492115031:role/task ##########
+  AWS_ROLE_ARN: arn:aws:iam::381492115031:role/Statuplus
   INSTANCE_NAME: statuspulse
   PUBLIC_BASE_URL: https://ak-info.online
 
@@ -19,6 +19,13 @@ jobs:
   deploy:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
+    
+    # REQUIRED PERMISSIONS FOR GHCR AND AWS OIDC
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
     steps:
       - name: Checkout commit
         uses: actions/checkout@v4
@@ -27,7 +34,6 @@ jobs:
 
       - name: Set Lowercase Image Name
         run: |
-          # This fixes the "repository name must be lowercase" error
           echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
         shell: bash
 
@@ -68,17 +74,18 @@ jobs:
       - name: Send deploy command via SSM
         id: ssm
         run: |
-          # Use Python to safely format the JSON command payload
           COMMAND_PAYLOAD=$(python3 - <<'PY'
           import json, os
+          # Use GITHUB_SHA provided by the runner environment
+          current_sha = os.environ.get('GITHUB_SHA')
           cmds = [
               "set -euo pipefail",
               "cd /opt/statuspulse",
-              f"git fetch --all --prune",
-              f"git checkout {os.environ.get('GITHUB_SHA')}",
+              "git fetch --all --prune",
+              f"git checkout {current_sha}",
               (
                   f"IMAGE_NAME={os.environ['IMAGE_NAME']} "
-                  f"IMAGE_TAG={os.environ.get('GITHUB_SHA')} "
+                  f"IMAGE_TAG={current_sha} "
                   f"PUBLIC_BASE_URL={os.environ['PUBLIC_BASE_URL']} "
                   "./scripts/deploy.sh"
               )
@@ -100,6 +107,7 @@ jobs:
               --command-id "${{ steps.ssm.outputs.command_id }}" \
               --instance-id "${{ steps.instance.outputs.instance_id }}" \
               --query 'Status' --output text 2>/dev/null || true)
+            echo "Current Status: $STATUS"
             if [ "$STATUS" = "Success" ]; then
               echo "Deployment Successful"
               exit 0
