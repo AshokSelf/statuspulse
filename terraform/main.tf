@@ -1,4 +1,13 @@
 terraform {
+  backend "s3" {
+    bucket = "your-unique-terraform-state-bucket"
+    key    = "statuspulse/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+
+
+terraform {
   required_version = ">= 1.5.0"
 
   required_providers {

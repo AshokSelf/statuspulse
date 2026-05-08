@@ -9,33 +9,70 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  # --- Hardcoded AWS Configuration ---
   AWS_REGION: us-east-1
-  AWS_ROLE_ARN: arn:aws:iam::381492115031:role/task
+  # This role must ALREADY exist and have permissions to run Terraform
+  AWS_BOOTSTRAP_ROLE: arn:aws:iam::381492115031:role/statuspulse-github-actions 
   INSTANCE_NAME: statuspulse
+  TF_WORKING_DIR: terraform
   PUBLIC_BASE_URL: https://ak-info.online
 
 jobs:
   deploy:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    
-    # REQUIRED PERMISSIONS FOR GHCR AND AWS OIDC
     permissions:
       contents: read
       packages: write
       id-token: write
 
     steps:
-      - name: Checkout commit
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-      - name: Set Lowercase Image Name
+      - name: Set lowercase image name
+        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_BOOTSTRAP_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false # Better for capturing raw outputs
+
+      - name: Terraform Init & Apply
+        id: tf
+        working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
-          echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+          terraform init
+          terraform apply -auto-approve
+          # Export instance_id for the next steps
+          echo "EC2_ID=$(terraform output -raw instance_id)" >> $GITHUB_ENV
         shell: bash
+
+      - name: Wait for SSM Agent
+        shell: bash
+        run: |
+          echo "Checking SSM status for ${{ env.EC2_ID }}..."
+          for i in $(seq 1 30); do
+            STATUS=$(aws ssm describe-instance-information \
+              --filters "Key=InstanceIds,Values=${{ env.EC2_ID }}" \
+              --query 'InstanceInformationList[0].PingStatus' --output text 2>/dev/null || true)
+            
+            if [ "$STATUS" = "Online" ]; then
+              echo "SSM agent is Online"
+              exit 0
+            fi
+            echo "Waiting for agent... (Current status: $STATUS)"
+            sleep 10
+          done
+          echo "SSM agent did not come online in time."
+          exit 1
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -53,69 +90,50 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.IMAGE_NAME }}:latest
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Find EC2 instance
-        id: instance
-        run: |
-          INSTANCE_ID="$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=${{ env.INSTANCE_NAME }}" "Name=instance-state-name,Values=running" \
-            --query 'Reservations[0].Instances[0].InstanceId' --output text)"
-          if [ "$INSTANCE_ID" = "None" ] || [ -z "$INSTANCE_ID" ]; then
-            echo "Error: No running instance found with name ${{ env.INSTANCE_NAME }}"
-            exit 1
-          fi
-          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
-
       - name: Send deploy command via SSM
         id: ssm
+        shell: bash
         run: |
-          COMMAND_PAYLOAD=$(python3 - <<'PY'
+          COMMAND_PAYLOAD=$(python3 <<'PY'
           import json, os
-          # Use GITHUB_SHA provided by the runner environment
-          current_sha = os.environ.get('GITHUB_SHA')
+          sha = os.environ.get("GITHUB_SHA")
+          img = os.environ.get("IMAGE_NAME")
+          url = os.environ.get("PUBLIC_BASE_URL")
           cmds = [
               "set -euo pipefail",
               "cd /opt/statuspulse",
+              "git config --global --add safe.directory /opt/statuspulse || true",
               "git fetch --all --prune",
-              f"git checkout {current_sha}",
-              (
-                  f"IMAGE_NAME={os.environ['IMAGE_NAME']} "
-                  f"IMAGE_TAG={current_sha} "
-                  f"PUBLIC_BASE_URL={os.environ['PUBLIC_BASE_URL']} "
-                  "./scripts/deploy.sh"
-              )
+              f"git checkout {sha}",
+              f"IMAGE_NAME={img} IMAGE_TAG={sha} PUBLIC_BASE_URL={url} ./scripts/deploy.sh"
           ]
           print(json.dumps({"commands": cmds}))
           PY
           )
-          COMMAND_ID=$(aws ssm send-command \
+
+          CMD_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
-            --instance-ids "${{ steps.instance.outputs.instance_id }}" \
+            --instance-ids "${{ env.EC2_ID }}" \
             --parameters "$COMMAND_PAYLOAD" \
             --query 'Command.CommandId' --output text)
-          echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
+          
+          echo "command_id=$CMD_ID" >> $GITHUB_OUTPUT
 
       - name: Wait for Deployment Completion
+        shell: bash
         run: |
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             STATUS=$(aws ssm get-command-invocation \
               --command-id "${{ steps.ssm.outputs.command_id }}" \
-              --instance-id "${{ steps.instance.outputs.instance_id }}" \
+              --instance-id "${{ env.EC2_ID }}" \
               --query 'Status' --output text 2>/dev/null || true)
+
             echo "Current Status: $STATUS"
-            if [ "$STATUS" = "Success" ]; then
-              echo "Deployment Successful"
-              exit 0
-            elif [[ "$STATUS" =~ ^(Failed|Cancelled|TimedOut)$ ]]; then
-              echo "Deployment failed with status: $STATUS"
-              exit 1
-            fi
+            if [ "$STATUS" = "Success" ]; then exit 0; fi
+            if [[ "$STATUS" =~ ^(Failed|Cancelled|TimedOut)$ ]]; then exit 1; fi
             sleep 10
           done
-          echo "Timed out waiting for SSM"
           exit 1
+
+      - name: Verify Health
+        run: curl -fsS "${{ env.PUBLIC_BASE_URL }}/health"
