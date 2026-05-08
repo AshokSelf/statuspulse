@@ -11,7 +11,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   AWS_REGION: us-east-1
   # This role must ALREADY exist and have permissions to run Terraform
-  AWS_BOOTSTRAP_ROLE: arn:aws:iam::381492115031:role/statuspulse-github-actions 
+  AWS_BOOTSTRAP_ROLE: arn:aws:iam::381492115031:role/task
   INSTANCE_NAME: statuspulse
   TF_WORKING_DIR: terraform
   PUBLIC_BASE_URL: https://ak-info.online
