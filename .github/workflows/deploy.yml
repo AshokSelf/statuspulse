@@ -11,7 +11,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   # --- Hardcoded AWS Configuration ---
   AWS_REGION: us-east-1
-  AWS_ROLE_ARN: arn:aws:iam::381492115031:role/task
+  AWS_ROLE_ARN: arn:aws:iam::381492115031:role/task ##########
   INSTANCE_NAME: statuspulse
   PUBLIC_BASE_URL: https://ak-info.online
 
