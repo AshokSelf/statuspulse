@@ -54,5 +54,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     except: sys.exit(1)"
 
 # Ensure the path to main:app matches your directory structure
-# CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "main:app", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "60"]
 CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "main:app", "--bind", "0.0.0.0:8000", "--workers", "2"]

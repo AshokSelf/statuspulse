@@ -34,10 +34,14 @@ jobs:
       PUBLIC_BASE_URL: https://ak-info.online
       DEPLOY_NOTIFY_WEBHOOK_URL: ${{ secrets.DEPLOY_NOTIFY_WEBHOOK_URL }}
     steps:
-      - name: Checkout commit that passed CI
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      # THIS STEP IS THE FIX
+      - name: Set Lowercase Image Name
+        run: |
+          echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+        shell: bash
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -52,6 +56,7 @@ jobs:
           context: .
           file: Dockerfile
           push: true
+          # Use env.IMAGE_NAME which is now lowercase
           tags: |
             ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
             ${{ env.IMAGE_NAME }}:latest
