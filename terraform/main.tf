@@ -101,7 +101,7 @@ resource "aws_instance" "statuspulse" {
   subnet_id                   = data.aws_subnet.selected.id
   vpc_security_group_ids      = [aws_security_group.statuspulse.id]
   associate_public_ip_address = true
-  iam_instance_profile        = aws_iam_instance_profile.ec2.name
+  # iam_instance_profile        = aws_iam_instance_profile.ec2.name
   user_data_replace_on_change = true
 
   iam_instance_profile        = "statuspulse-ec2-profile"
