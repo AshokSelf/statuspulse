@@ -104,6 +104,8 @@ resource "aws_instance" "statuspulse" {
   iam_instance_profile        = aws_iam_instance_profile.ec2.name
   user_data_replace_on_change = true
 
+  iam_instance_profile        = "statuspulse-ec2-profile"
+
   user_data = <<-EOF
 #!/bin/bash
 set -euo pipefail

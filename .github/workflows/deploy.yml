@@ -45,19 +45,29 @@ jobs:
         with:
           terraform_wrapper: false # Better for capturing raw outputs
 
-      - name: Terraform Init & Apply
-        id: tf
+      - name: Terraform Apply
         working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: bash
         run: |
           terraform init
-          OIDC_ARN="arn:aws:iam::381492115031:oidc-provider/token.actions.githubusercontent.com"
-          terraform import aws_iam_openid_connect_provider.github $OIDC_ARN || echo "Provider not found or already in state"
-          terraform import aws_iam_role.ec2_ssm statuspulse-ec2-role || echo "Role not found"
-          terraform import aws_iam_role.github_actions statuspulse-github-actions || echo "Role not found"
+          
+          # 1. REMOVED OIDC AND ROLE IMPORTS (They are handled by S3 state or ignored)
+          
+          # 2. Only import the SG if it's missing from the state but exists in AWS
+          # This prevents the 400 Duplicate error
+          SG_ID=$(aws ec2 describe-security-groups \
+            --filters Name=group-name,Values=${{ env.INSTANCE_NAME }}-sg \
+            --query "SecurityGroups[0].GroupId" --output text)
+          
+          if [ "$SG_ID" != "None" ] && [ -n "$SG_ID" ]; then
+            # We use '|| true' so if it's already in the S3 state, it doesn't crash
+            terraform import aws_security_group.statuspulse $SG_ID || true
+          fi
+
+          # 3. Apply
           terraform apply -auto-approve
-          # Export instance_id for the next steps
+          
           echo "EC2_ID=$(terraform output -raw instance_id)" >> $GITHUB_ENV
-        shell: bash
 
       - name: Wait for SSM Agent
         shell: bash
