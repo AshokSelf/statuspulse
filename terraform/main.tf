@@ -42,52 +42,25 @@ data "aws_ssm_parameter" "al2023_ami" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64"
 }
 
+# EXISTING IAM INSTANCE PROFILE
+# (Already created manually in AWS)
+
+data "aws_iam_instance_profile" "ec2" {
+  name = "statuspulse-ec2-profile"
+}
+
 # =========================================================
 # LOCALS
 # =========================================================
 
 locals {
-  caddy_email          = var.caddy_email != "" ? var.caddy_email : "admin@${var.domain_name}"
+  caddy_email = var.caddy_email != "" ? var.caddy_email : "admin@${var.domain_name}"
 
-  public_base_url      = var.public_base_url != "" ? var.public_base_url : "https://${var.domain_name}"
+  public_base_url = var.public_base_url != "" ? var.public_base_url : "https://${var.domain_name}"
 
   repository_clone_url = var.repository_clone_url != "" ? var.repository_clone_url : "https://github.com/${var.github_repository}.git"
 
-  ghcr_image           = var.ghcr_image != "" ? var.ghcr_image : "ghcr.io/${var.github_repository}"
-}
-
-# =========================================================
-# EC2 SSM ROLE
-# =========================================================
-
-resource "aws_iam_role" "ec2_ssm" {
-  name = "${var.project_name}-ec2-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-
-    Statement = [
-      {
-        Effect = "Allow"
-
-        Principal = {
-          Service = "ec2.amazonaws.com"
-        }
-
-        Action = "sts:AssumeRole"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "ec2_ssm_core" {
-  role       = aws_iam_role.ec2_ssm.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-resource "aws_iam_instance_profile" "ec2" {
-  name = "${var.project_name}-ec2-profile"
-  role = aws_iam_role.ec2_ssm.name
+  ghcr_image = var.ghcr_image != "" ? var.ghcr_image : "ghcr.io/${var.github_repository}"
 }
 
 # =========================================================
@@ -97,29 +70,44 @@ resource "aws_iam_instance_profile" "ec2" {
 resource "aws_security_group" "statuspulse" {
   name        = "${var.project_name}-sg"
   description = "StatusPulse web traffic"
-  vpc_id      = data.aws_vpc.default.id
+
+  vpc_id = data.aws_vpc.default.id
 
   ingress {
     description = "HTTP"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+
+    from_port = 80
+    to_port   = 80
+
+    protocol = "tcp"
+
+    cidr_blocks = [
+      "0.0.0.0/0"
+    ]
   }
 
   ingress {
     description = "HTTPS"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+
+    from_port = 443
+    to_port   = 443
+
+    protocol = "tcp"
+
+    cidr_blocks = [
+      "0.0.0.0/0"
+    ]
   }
 
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port = 0
+    to_port   = 0
+
+    protocol = "-1"
+
+    cidr_blocks = [
+      "0.0.0.0/0"
+    ]
   }
 
   tags = {
@@ -133,19 +121,19 @@ resource "aws_security_group" "statuspulse" {
 # =========================================================
 
 resource "aws_instance" "statuspulse" {
-  ami                         = data.aws_ssm_parameter.al2023_ami.value
+  ami = data.aws_ssm_parameter.al2023_ami.value
 
-  instance_type               = var.instance_type
+  instance_type = var.instance_type
 
-  subnet_id                   = data.aws_subnet.selected.id
+  subnet_id = data.aws_subnet.selected.id
 
-  vpc_security_group_ids      = [
+  vpc_security_group_ids = [
     aws_security_group.statuspulse.id
   ]
 
   associate_public_ip_address = true
 
-  iam_instance_profile        = aws_iam_instance_profile.ec2.name
+  iam_instance_profile = data.aws_iam_instance_profile.ec2.name
 
   user_data_replace_on_change = true
 
@@ -244,7 +232,8 @@ EOF
 
   metadata_options {
     http_endpoint = "enabled"
-    http_tokens   = "required"
+
+    http_tokens = "required"
   }
 }
 
@@ -262,7 +251,7 @@ resource "aws_eip" "statuspulse" {
 }
 
 resource "aws_eip_association" "statuspulse" {
-  instance_id   = aws_instance.statuspulse.id
+  instance_id = aws_instance.statuspulse.id
 
   allocation_id = aws_eip.statuspulse.id
 }
