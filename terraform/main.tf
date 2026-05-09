@@ -183,11 +183,14 @@ dnf update -y
 dnf install -y \
   docker \
   git \
-  curl \
   openssl \
   awscli \
   python3 \
   cronie
+
+if ! command -v curl >/dev/null 2>&1; then
+  dnf install -y curl-minimal || dnf install -y --allowerasing curl
+fi
 
 systemctl enable --now docker
 systemctl enable --now amazon-ssm-agent || true

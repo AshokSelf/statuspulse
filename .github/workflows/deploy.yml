@@ -122,7 +122,8 @@ jobs:
 
           commands = [
               "set -euo pipefail",
-              "if command -v dnf >/dev/null 2>&1; then dnf install -y docker git curl openssl python3 cronie; fi",
+              "if command -v dnf >/dev/null 2>&1; then dnf install -y docker git openssl python3 cronie; fi",
+              "if ! command -v curl >/dev/null 2>&1 && command -v dnf >/dev/null 2>&1; then dnf install -y curl-minimal || dnf install -y --allowerasing curl; fi",
               "systemctl enable --now docker || true",
               "systemctl enable --now amazon-ssm-agent || true",
               "systemctl enable --now crond || true",
