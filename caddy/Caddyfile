@@ -21,3 +21,7 @@
 		header_up X-Forwarded-Proto {scheme}
 	}
 }
+
+:8080 {
+	reverse_proxy {$APP_UPSTREAM_HOST}:8000
+}

@@ -202,15 +202,40 @@ jobs:
       - name: Verify health
         shell: bash
         run: |
-          curl -fsS "${PUBLIC_BASE_URL}/health" | python3 -c '
+          HOST="${PUBLIC_BASE_URL#http://}"
+          HOST="${HOST#https://}"
+          HOST="${HOST%%/*}"
+          HOST="${HOST%%:*}"
+
+          if ! getent hosts "$HOST" >/dev/null; then
+            echo "DNS lookup failed for $HOST. Point the domain to the Terraform Elastic IP before public verification can pass." >&2
+            exit 1
+          fi
+
+          BODY_FILE="$(mktemp)"
+          trap 'rm -f "$BODY_FILE"' EXIT
+
+          for _ in $(seq 1 12); do
+            if curl -fsS --max-time 20 -o "$BODY_FILE" "${PUBLIC_BASE_URL}/health" && python3 - "$BODY_FILE" <<'PY'
           import json
           import sys
 
-          data = json.load(sys.stdin)
+          with open(sys.argv[1], "r", encoding="utf-8") as fh:
+              data = json.load(fh)
+
           checks = data.get("checks", {})
           healthy = data.get("status") == "healthy" and all(checks.get(k) == "healthy" for k in ("api", "database", "redis"))
           raise SystemExit(0 if healthy else 1)
-          '
+          PY
+            then
+              exit 0
+            fi
+
+            sleep 10
+          done
+
+          echo "Public health verification failed for ${PUBLIC_BASE_URL}/health" >&2
+          exit 1
 
       - name: Notify success
         if: success() && env.DEPLOY_NOTIFY_WEBHOOK_URL != ''

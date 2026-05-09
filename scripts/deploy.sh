@@ -24,6 +24,46 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
 }
 
+health_response_is_healthy() {
+  local body_file="$1"
+
+  python3 - "$body_file" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+
+checks = data.get("checks", {})
+healthy = data.get("status") == "healthy" and all(
+    checks.get(key) == "healthy" for key in ("api", "database", "redis")
+)
+raise SystemExit(0 if healthy else 1)
+PY
+}
+
+curl_healthy_json() {
+  local url="$1"
+  shift
+
+  local body_file
+  body_file="$(mktemp)"
+
+  if ! curl -fsS --max-time 20 "$@" -o "$body_file" "$url"; then
+    rm -f "$body_file"
+    return 1
+  fi
+
+  if ! health_response_is_healthy "$body_file"; then
+    log "Health response from ${url} was not healthy JSON"
+    head -c 500 "$body_file" | tee -a "$LOG_FILE" >&2 || true
+    rm -f "$body_file"
+    return 1
+  fi
+
+  rm -f "$body_file"
+}
+
 set_env_value() {
   local key="$1"
   local value="$2"
@@ -116,6 +156,7 @@ rollback_to_active() {
 
 require_command docker
 require_command awk
+require_command curl
 require_command grep
 require_command python3
 
@@ -175,12 +216,11 @@ if ! run_compose "docker compose up for caddy" up -d caddy; then
   die "Failed to refresh Caddy"
 fi
 
-public_url="${PUBLIC_BASE_URL:-https://${DOMAIN:-localhost}}"
-health_url="${public_url%/}/health"
+caddy_health_url="${CADDY_HEALTH_URL:-http://127.0.0.1:${CADDY_HEALTH_PORT:-8080}/health}"
 
-log "Checking public health at ${health_url}"
-if ! curl -fsS --max-time 20 "$health_url" | python3 -c 'import json,sys; data=json.load(sys.stdin); checks=data.get("checks", {}); raise SystemExit(0 if data.get("status") == "healthy" and all(checks.get(k) == "healthy" for k in ("api","database","redis")) else 1)'; then
-  log "Public health check failed after cutover"
+log "Checking Caddy health at ${caddy_health_url}"
+if ! curl_healthy_json "$caddy_health_url"; then
+  log "Caddy health check failed after cutover"
   rollback_to_active
   die "Deployment rolled back"
 fi

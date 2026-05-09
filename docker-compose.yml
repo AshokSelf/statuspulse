@@ -154,6 +154,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "127.0.0.1:${CADDY_HEALTH_PORT:-8080}:8080"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
