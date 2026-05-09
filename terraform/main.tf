@@ -215,6 +215,7 @@ else
 fi
 
 git config --system --add safe.directory /opt/statuspulse || true
+chmod +x /opt/statuspulse/scripts/*.sh || true
 chmod -R u+rwX,go+rX /opt/statuspulse || true
 chown -R ec2-user:ec2-user /opt/statuspulse
 
@@ -236,8 +237,8 @@ cat >/etc/cron.d/statuspulse <<CRON
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-*/5 * * * * ec2-user cd /opt/statuspulse && ./scripts/health-monitor.sh >> /opt/statuspulse/logs/health-monitor.log 2>&1
-0 3 * * * ec2-user cd /opt/statuspulse && ./scripts/backup.sh >> /opt/statuspulse/logs/backup.log 2>&1
+*/5 * * * * ec2-user cd /opt/statuspulse && bash ./scripts/health-monitor.sh >> /opt/statuspulse/logs/health-monitor.log 2>&1
+0 3 * * * ec2-user cd /opt/statuspulse && bash ./scripts/backup.sh >> /opt/statuspulse/logs/backup.log 2>&1
 CRON
 
 chmod 0644 /etc/cron.d/statuspulse
