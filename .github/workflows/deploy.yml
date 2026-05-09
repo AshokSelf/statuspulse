@@ -18,7 +18,9 @@ env:
   AWS_ROLE_ARN: arn:aws:iam::381492115031:role/statuspulse-github-actions
   INSTANCE_NAME: statuspulse
   HEAD_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+  DOMAIN: ak-info.online
   PUBLIC_BASE_URL: https://ak-info.online
+  CADDY_EMAIL: admin@ak-info.online
   DEPLOY_NOTIFY_WEBHOOK_URL: ${{ secrets.DEPLOY_NOTIFY_WEBHOOK_URL }}
 
 jobs:
@@ -103,18 +105,49 @@ jobs:
           COMMAND_PAYLOAD="$(python3 - <<'PY'
           import json
           import os
+          import shlex
 
+          aws_account_id = os.environ["AWS_ACCOUNT_ID"]
+          aws_region = os.environ["AWS_REGION"]
+          caddy_email = os.environ["CADDY_EMAIL"]
+          domain = os.environ["DOMAIN"]
           head_sha = os.environ["HEAD_SHA"]
           image_name = os.environ["IMAGE_NAME"]
+          instance_name = os.environ["INSTANCE_NAME"]
           public_base_url = os.environ["PUBLIC_BASE_URL"]
+          repository_url = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}.git"
+
+          def q(value):
+              return shlex.quote(value)
 
           commands = [
               "set -euo pipefail",
+              "if command -v dnf >/dev/null 2>&1; then dnf install -y docker docker-compose-plugin git curl openssl python3 cronie; fi",
+              "systemctl enable --now docker || true",
+              "systemctl enable --now amazon-ssm-agent || true",
+              "systemctl enable --now crond || true",
+              "mkdir -p /opt /var/log/statuspulse",
+              "if [ ! -d /opt/statuspulse/.git ]; then "
+              "if [ -d /opt/statuspulse ] && [ -z \"$(find /opt/statuspulse -mindepth 1 -maxdepth 1 ! -name backups ! -name logs ! -name .env 2>/dev/null | head -n 1)\" ]; then "
+              "tmp_dir=\"$(mktemp -d /tmp/statuspulse-checkout.XXXXXX)\"; "
+              f"git clone --branch main --single-branch {q(repository_url)} \"$tmp_dir\"; "
+              "cp -a \"$tmp_dir\"/. /opt/statuspulse/; "
+              "rm -rf \"$tmp_dir\"; "
+              "elif [ ! -e /opt/statuspulse ]; then "
+              f"git clone --branch main --single-branch {q(repository_url)} /opt/statuspulse; "
+              "else "
+              "echo '/opt/statuspulse exists but is not a git checkout' >&2; "
+              "exit 1; "
+              "fi; "
+              "fi",
               "cd /opt/statuspulse",
               "git config --global --add safe.directory /opt/statuspulse || true",
+              f"git remote set-url origin {q(repository_url)}",
               "git fetch --all --prune",
-              f"git checkout {head_sha}",
-              f"IMAGE_NAME={image_name} IMAGE_TAG={head_sha} PUBLIC_BASE_URL={public_base_url} ./scripts/deploy.sh",
+              f"git checkout {q(head_sha)}",
+              f"IMAGE_NAME={q(image_name)} PUBLIC_BASE_URL={q(public_base_url)} DOMAIN={q(domain)} CADDY_EMAIL={q(caddy_email)} AWS_REGION={q(aws_region)} AWS_ACCOUNT_ID={q(aws_account_id)} AWS_INSTANCE_NAME={q(instance_name)} bash ./scripts/bootstrap-prod-env.sh",
+              "chown -R ec2-user:ec2-user /opt/statuspulse || true",
+              f"IMAGE_NAME={q(image_name)} IMAGE_TAG={q(head_sha)} PUBLIC_BASE_URL={q(public_base_url)} ./scripts/deploy.sh",
           ]
 
           print(json.dumps({"commands": commands}))

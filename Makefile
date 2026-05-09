@@ -7,7 +7,7 @@ SHELL := /bin/bash
 bootstrap:
 	@if [ ! -f .env ]; then cp .env.example .env; echo "Created .env from .env.example"; else echo ".env already exists"; fi
 	@python3 -m py_compile app/main.py
-	@bash -n scripts/deploy.sh scripts/backup.sh scripts/health-monitor.sh tests/test_integration.sh
+	@bash -n scripts/deploy.sh scripts/backup.sh scripts/health-monitor.sh scripts/bootstrap-prod-env.sh tests/test_integration.sh
 	@$(COMPOSE) config --quiet
 	@echo "Bootstrap checks passed."
 	@echo "Next: cd terraform && terraform init && terraform validate"

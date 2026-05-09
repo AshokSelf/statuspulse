@@ -109,7 +109,7 @@ NEW_IMAGE="${IMAGE_NAME}:${IMAGE_TAG}"
 log "Starting deploy: active slot=${ACTIVE_SLOT}, candidate slot=${CANDIDATE_SLOT}"
 log "Target image: ${NEW_IMAGE}"
 
-set_env_value "${CANDIDATE_SLOT^^}_IMAGE" "$NEW_IMAGE"
+set_env_value "APP_${CANDIDATE_SLOT^^}_IMAGE" "$NEW_IMAGE"
 set_env_value APP_UPSTREAM_HOST "$ACTIVE_SERVICE"
 
 log "Ensuring active service is running"

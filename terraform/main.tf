@@ -196,9 +196,7 @@ systemctl enable --now crond
 
 usermod -aG docker ec2-user || true
 
-mkdir -p /opt/statuspulse
-mkdir -p /opt/statuspulse/backups
-mkdir -p /opt/statuspulse/logs
+mkdir -p /opt
 mkdir -p /var/log/statuspulse
 
 if [ ! -d /opt/statuspulse/.git ]; then
@@ -218,58 +216,17 @@ git config --system --add safe.directory /opt/statuspulse || true
 chmod -R u+rwX,go+rX /opt/statuspulse || true
 chown -R ec2-user:ec2-user /opt/statuspulse
 
-touch /opt/statuspulse/logs/statuspulse-monitor.log
-chown ec2-user:ec2-user /opt/statuspulse/logs/statuspulse-monitor.log
-
-DB_PASSWORD="$(openssl rand -hex 24)"
-REDIS_PASSWORD="$(openssl rand -hex 24)"
-
-cat >/opt/statuspulse/.env <<ENV
-APP_PORT=8000
-APP_IMAGE=${local.ghcr_image}:latest
-DB_HOST=db
-DB_PORT=5432
-DB_NAME=statuspulse
-DB_USER=statuspulse
-DB_PASSWORD=$${DB_PASSWORD}
-REDIS_HOST=redis
-REDIS_PORT=6379
-REDIS_PASSWORD=$${REDIS_PASSWORD}
-RATE_LIMIT_REQUESTS=60
-RATE_LIMIT_WINDOW_SECONDS=60
-APP_BLUE_IMAGE=${local.ghcr_image}:latest
-APP_GREEN_IMAGE=${local.ghcr_image}:latest
-ACTIVE_SLOT=blue
-APP_UPSTREAM_HOST=app_blue
-DOMAIN=${var.domain_name}
-PUBLIC_BASE_URL=${local.public_base_url}
-PUBLIC_HEALTH_URL=${local.public_base_url}/health
-CADDY_EMAIL=${local.caddy_email}
-UPTIME_KUMA_PORT=3001
-ALERT_WEBHOOK_URL=
-EXPECTED_CONTAINERS=statuspulse-caddy statuspulse-db statuspulse-redis
-DB_CONTAINER=statuspulse-db
-REDIS_CONTAINER=statuspulse-redis
-TLS_HOST=${var.domain_name}
-TLS_PORT=443
-TLS_WARN_DAYS=14
-DISK_WARN_PCT=80
-MEMORY_WARN_PCT=90
-MONITOR_PATH=/
-HTTP_TIMEOUT_SECONDS=10
-WEBHOOK_TIMEOUT_SECONDS=10
-TCP_TIMEOUT_SECONDS=3
-LOG_FILE=/opt/statuspulse/logs/statuspulse-monitor.log
-BACKUP_DIR=/opt/statuspulse/backups
-BACKUP_RETENTION_COUNT=7
-S3_BACKUP_BUCKET=
-S3_BACKUP_PREFIX=statuspulse
-AWS_REGION=${var.aws_region}
-AWS_ACCOUNT_ID=${var.aws_account_id}
-AWS_INSTANCE_NAME=${var.instance_name}
-ENV
+IMAGE_NAME=${local.ghcr_image} \
+DOMAIN=${var.domain_name} \
+PUBLIC_BASE_URL=${local.public_base_url} \
+CADDY_EMAIL=${local.caddy_email} \
+AWS_REGION=${var.aws_region} \
+AWS_ACCOUNT_ID=${var.aws_account_id} \
+AWS_INSTANCE_NAME=${var.instance_name} \
+bash /opt/statuspulse/scripts/bootstrap-prod-env.sh
 
 chmod 0600 /opt/statuspulse/.env
+chown -R ec2-user:ec2-user /opt/statuspulse
 
 cat >/etc/cron.d/statuspulse <<CRON
 SHELL=/bin/bash
