@@ -182,7 +182,6 @@ set -euo pipefail
 dnf update -y
 dnf install -y \
   docker \
-  docker-compose-plugin \
   git \
   curl \
   openssl \
@@ -215,6 +214,8 @@ fi
 git config --system --add safe.directory /opt/statuspulse || true
 chmod -R u+rwX,go+rX /opt/statuspulse || true
 chown -R ec2-user:ec2-user /opt/statuspulse
+
+bash /opt/statuspulse/scripts/install-compose-plugin.sh
 
 IMAGE_NAME=${local.ghcr_image} \
 DOMAIN=${var.domain_name} \
