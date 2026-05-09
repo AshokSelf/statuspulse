@@ -67,5 +67,5 @@ variable "repository_clone_url" {
 variable "ghcr_image" {
   description = "Container image repository in GHCR."
   type        = string
-  default     = "ghcr.io/AshokSelf/statuspulse"
+  default     = "ghcr.io/ashokself/statuspulse"
 }

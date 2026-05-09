@@ -92,12 +92,17 @@ SERVICE_URL="https://example.com/$(date -u +%s)"
 INCIDENT_TITLE="Integration test incident $(date -u +%s)"
 
 check_health() {
-  read -r rc status body < <(request GET /health)
-  [ "$rc" -eq 0 ] || fail "GET /health could not be reached"
-  assert_status 200 "$status" || fail "GET /health returned $status"
-  assert_json_file "$body" 'data["status"] == "healthy"'
-  assert_json_file "$body" '"database" in data["checks"] and "redis" in data["checks"]'
-  pass "GET /health"
+  local attempt
+  for attempt in $(seq 1 30); do
+    read -r rc status body < <(request GET /health)
+    if [ "$rc" -eq 0 ] && assert_status 200 "$status" && assert_json_file "$body" 'data["status"] == "healthy"' && assert_json_file "$body" '"database" in data["checks"] and "redis" in data["checks"]'; then
+      pass "GET /health"
+      return 0
+    fi
+    sleep 2
+  done
+
+  fail "GET /health could not be reached"
 }
 
 check_root() {

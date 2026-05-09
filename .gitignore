@@ -9,5 +9,7 @@ __pycache__/
 .venv/
 task-*/
 terraform/.terraform/
+terraform/.terraform.lock.hcl
 terraform/*.tfstate
 terraform/*.tfstate.*
+tests/results/

@@ -275,8 +275,9 @@ Then:
 
 1. Take the `elastic_ip` output.
 2. Point `ak-info.online` to that Elastic IP with an `A` record.
-3. The Terraform defaults already target `AshokSelf/statuspulse`.
+3. The Terraform defaults already target `AshokSelf/statuspulse` and the lowercase GHCR image path `ghcr.io/ashokself/statuspulse`.
 4. The GitHub Actions workflow uses GHCR and AWS OIDC automatically.
+5. Terraform stores its state locally in `terraform/terraform.tfstate`, which is already ignored by git along with `.terraform/`.
 
 ### GitHub Actions Flow Diagram
 

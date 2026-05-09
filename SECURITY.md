@@ -44,7 +44,7 @@ Example local commands:
 
 ```bash
 trivy fs --scanners vuln,secret .
-trivy image ghcr.io/AshokSelf/statuspulse:latest
+trivy image ghcr.io/ashokself/statuspulse:latest
 ```
 
 ## Backups and Recovery

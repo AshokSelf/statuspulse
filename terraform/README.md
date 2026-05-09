@@ -1,6 +1,7 @@
 # Terraform Setup
 
 This Terraform configuration provisions the AWS runtime for StatusPulse in `us-east-1`.
+It uses local Terraform state on your machine, not an S3 backend, so `terraform.tfstate` stays in the `terraform/` directory and is ignored by git.
 
 ## What it creates
 
@@ -21,7 +22,7 @@ This Terraform configuration provisions the AWS runtime for StatusPulse in `us-e
 - `github_repository`
   - Defaults to `AshokSelf/statuspulse`.
 - `ghcr_image`
-  - Defaults to `ghcr.io/AshokSelf/statuspulse`.
+  - Defaults to `ghcr.io/ashokself/statuspulse`.
 - `repository_clone_url`
   - Defaults to `https://github.com/AshokSelf/statuspulse.git`.
   - If your repo is private, replace the bootstrap strategy with a deploy key or other authenticated clone method.
@@ -58,5 +59,6 @@ The EC2 user data script installs Docker, the Compose plugin, Git, AWS CLI, and 
 - prepares backup and log directories
 - installs cron jobs for the health monitor and database backups
 - marks `/opt/statuspulse` as a Git safe directory so GitHub Actions can trigger SSM-based deploys cleanly
+- writes a complete `/opt/statuspulse/.env` file, including blue-green image tags, database and Redis credentials, monitoring thresholds, backup settings, and AWS metadata
 
 The first deployment can then be executed from GitHub Actions without manual server setup.

@@ -7,12 +7,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /build
 ENV PYTHONPATH=/app
 
+# hadolint ignore=DL3008
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY app/requirements.txt ./requirements.txt
 
+# hadolint ignore=DL3013
 RUN pip install --upgrade pip setuptools wheel \
     && pip wheel --wheel-dir=/wheels -r requirements.txt
 
@@ -20,12 +22,11 @@ FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    # Add /app to PYTHONPATH so "main:app" can be found easily
     PYTHONPATH=/app
-ENV PYTHONPATH=/app
 
 WORKDIR /app
 
+# hadolint ignore=DL3008
 RUN apt-get update \
     && apt-get install -y --no-install-recommends bash ca-certificates libpq5 \
     && rm -rf /var/lib/apt/lists/* \

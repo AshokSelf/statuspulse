@@ -46,6 +46,9 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: "1"
 
+      - name: Lint Dockerfile with hadolint
+        run: docker run --rm -i hadolint/hadolint:latest < Dockerfile
+
       - name: Build Docker image
         run: docker build -t statuspulse-app:${{ github.sha }} -f Dockerfile .
 
