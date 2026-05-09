@@ -53,9 +53,41 @@ set_env_value() {
   mv "$tmp_file" "$ENV_FILE"
 }
 
+compose() {
+  docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --profile prod "$@"
+}
+
+run_compose() {
+  local description="$1"
+  shift
+
+  local output
+  if ! output="$(compose "$@" 2>&1)"; then
+    log "ERROR: ${description} failed"
+    if [ -n "$output" ]; then
+      printf '%s\n' "$output" | tee -a "$LOG_FILE" >&2
+    fi
+    compose ps 2>&1 | tee -a "$LOG_FILE" >&2 || true
+    return 1
+  fi
+}
+
+candidate_container_name() {
+  printf 'statuspulse-app-%s' "$CANDIDATE_SLOT"
+}
+
+remove_stale_candidate() {
+  local container_name
+  container_name="$(candidate_container_name)"
+
+  compose stop "$CANDIDATE_SERVICE" >/dev/null 2>&1 || true
+  compose rm -f "$CANDIDATE_SERVICE" >/dev/null 2>&1 || true
+  docker rm -f "$container_name" >/dev/null 2>&1 || true
+}
+
 ensure_service_up() {
   local service="$1"
-  docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --profile prod up -d "$service" >/dev/null
+  run_compose "docker compose up for ${service}" up -d "$service"
 }
 
 container_healthcheck() {
@@ -78,8 +110,8 @@ rollback_to_active() {
   log "Rolling back traffic to ${ACTIVE_SERVICE}"
   set_env_value ACTIVE_SLOT "$ACTIVE_SLOT"
   set_env_value APP_UPSTREAM_HOST "$ACTIVE_SERVICE"
-  docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --profile prod up -d caddy >/dev/null || true
-  docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --profile prod stop "$CANDIDATE_SERVICE" >/dev/null 2>&1 || true
+  compose up -d caddy >/dev/null || true
+  compose stop "$CANDIDATE_SERVICE" >/dev/null 2>&1 || true
 }
 
 require_command docker
@@ -115,18 +147,22 @@ set_env_value APP_UPSTREAM_HOST "$ACTIVE_SERVICE"
 log "Ensuring active service is running"
 ensure_service_up "$ACTIVE_SERVICE"
 
+log "Removing stale candidate container ${CANDIDATE_SERVICE}"
+remove_stale_candidate
+
 log "Pulling updated image"
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --profile prod pull "$CANDIDATE_SERVICE" >/dev/null
+run_compose "docker compose pull for ${CANDIDATE_SERVICE}" pull "$CANDIDATE_SERVICE"
 
 log "Starting candidate container ${CANDIDATE_SERVICE}"
 ensure_service_up "$CANDIDATE_SERVICE"
 
-candidate_container_id="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --profile prod ps -q "$CANDIDATE_SERVICE")"
+candidate_container_id="$(compose ps -q "$CANDIDATE_SERVICE")"
 [ -n "$candidate_container_id" ] || die "Unable to find candidate container id"
 
 log "Waiting for candidate health"
 if ! container_healthcheck "$candidate_container_id"; then
-  docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --profile prod stop "$CANDIDATE_SERVICE" >/dev/null 2>&1 || true
+  docker logs --tail=100 "$candidate_container_id" 2>&1 | tee -a "$LOG_FILE" >&2 || true
+  compose stop "$CANDIDATE_SERVICE" >/dev/null 2>&1 || true
   die "Candidate container failed health check"
 fi
 
@@ -134,7 +170,7 @@ set_env_value ACTIVE_SLOT "$CANDIDATE_SLOT"
 set_env_value APP_UPSTREAM_HOST "$CANDIDATE_SERVICE"
 
 log "Refreshing Caddy"
-if ! docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --profile prod up -d caddy >/dev/null; then
+if ! run_compose "docker compose up for caddy" up -d caddy; then
   rollback_to_active
   die "Failed to refresh Caddy"
 fi
@@ -150,6 +186,6 @@ if ! curl -fsS --max-time 20 "$health_url" | python3 -c 'import json,sys; data=j
 fi
 
 log "Stopping previous active service ${ACTIVE_SERVICE}"
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --profile prod stop "$ACTIVE_SERVICE" >/dev/null 2>&1 || true
+compose stop "$ACTIVE_SERVICE" >/dev/null 2>&1 || true
 
 log "Deployment completed successfully"
